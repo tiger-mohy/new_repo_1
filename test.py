@@ -1,1 +1,1 @@
-print("awad")
+print("mohy")
