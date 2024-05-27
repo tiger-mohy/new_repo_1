@@ -57,8 +57,7 @@ jobs:
           python-version: '3.9'
 
       - name: Set s3 private pypi credentials
-        run: "echo -e \"machine ${{ secrets.ELECTRON_PIP_FQDN }} \nlogin ${{ secrets.ELECTRON_PIP_USER\
-          \ }} \npassword ${{ secrets.ELECTRON_PIP_PASS }} \" > $HOME/.netrc"
+        run: "echo -e \"machine ${{ secrets.ELECTRON_PIP_FQDN }} \nlogin ${{ secrets.ELECTRON_PIP_USER }} \npassword ${{ secrets.ELECTRON_PIP_PASS }} \" > $HOME/.netrc"
       - name: Install dependencies
         env:
           SSH_AUTH_SOCK: /tmp/ssh_agent.sock
