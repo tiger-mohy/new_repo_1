@@ -1,0 +1,85 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+env:
+  AWS_DEFAULT_REGION: us-east-1
+  APP_STAGE: local
+  SERVICE_NAME: bulk-update
+
+jobs:
+  test:
+
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Check if running available
+        env:
+          ELECTRON_APPROVERS: ${{ secrets.ELECTRON_APPROVERS }}
+        if: (github.event_name == 'pull_request_target' && !contains(env.ELECTRON_APPROVERS,
+          format('{0}{1}{2}', '|', github.actor, '|'))) || (github.event_name != 'pull_request_target'
+          && github.actor == 'dependabot[bot]')
+        run: exit 1
+      - name: Checkout
+        if: ${{ github.event_name != 'pull_request_target' }}
+        uses: actions/checkout@v3
+      - name: Checkout PR
+        if: ${{ github.event_name == 'pull_request_target' }}
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup SSH Keys and known_hosts
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
+          ssh-add - <<< "${{ secrets.ELECTRON_SSH_PRIVATE_KEY }}"
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Set s3 private pypi credentials
+        run: "echo -e \"machine ${{ secrets.ELECTRON_PIP_FQDN }} \nlogin ${{ secrets.ELECTRON_PIP_USER\
+          \ }} \npassword ${{ secrets.ELECTRON_PIP_PASS }} \" > $HOME/.netrc"
+      - name: Install dependencies
+        env:
+          SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+          PIP_EXISTS_ACTION: i
+          ELECTRON_PIP_FQDN: ${{ secrets.ELECTRON_PIP_FQDN }}
+          ELECTRON_PIP_USER: ${{ secrets.ELECTRON_PIP_USER }}
+          ELECTRON_PIP_PASS: ${{ secrets.ELECTRON_PIP_PASS }}
+        run: |
+          sudo apt install build-essential libssl-dev
+          make install-requirements
+
+      - name: Copy config
+        run: cp .env.example .env
+
+      - name: Test
+        run: |
+          make activate
+          make test
+
+      - name: Coveralls
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .venv/bin/coveralls --service=github
